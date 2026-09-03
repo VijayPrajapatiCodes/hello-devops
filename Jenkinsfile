@@ -14,7 +14,7 @@ pipeline {
             steps {
                 withEnv([
                     'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
-                    'PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH'
+            'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
                 ]) {
                     sh '''
                         echo "=== Java used for build ==="
