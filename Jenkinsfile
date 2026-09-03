@@ -10,22 +10,29 @@ pipeline {
             }
         }
 
-       stage('Build') {
-    steps {
-        withEnv([
-            'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
-            'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
-        ]) {
-                sh '''
-                    echo "=== Java Version ==="
-                    java -version
+        stage('Build') {
+            steps {
+                withEnv([
+                    'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
+                    'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
+                ]) {
+                    sh '''
+                        echo "=== Java Version ==="
+                        java -version
 
-                    echo "=== Maven Version ==="
-                    ./mvnw -version
+                        echo "=== Javac Version ==="
+                        javac -version
 
-                    echo "=== Maven Build ==="
-                    ./mvnw clean package
-                '''
+                        echo "=== JAVA_HOME ==="
+                        echo $JAVA_HOME
+
+                        echo "=== Maven Version ==="
+                        ./mvnw -version
+
+                        echo "=== Maven Build ==="
+                        ./mvnw clean package
+                    '''
+                }
             }
         }
 
