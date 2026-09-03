@@ -10,8 +10,12 @@ pipeline {
             }
         }
 
-        stage('Build') {
-            steps {
+       stage('Build') {
+    steps {
+        withEnv([
+            'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
+            'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
+        ]) {
                 sh '''
                     echo "=== Java Version ==="
                     java -version
