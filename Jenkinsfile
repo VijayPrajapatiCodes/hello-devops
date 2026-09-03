@@ -10,26 +10,31 @@ pipeline {
             }
         }
 
-stage('Build') {
-    steps {
-        sh '''
-            echo "=== Java used by Jenkins build ==="
-            java -version
+        stage('Build') {
+            steps {
+                withEnv([
+                    'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
+                    'PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH'
+                ]) {
+                    sh '''
+                        echo "=== Java used for build ==="
+                        java -version
 
-            echo "=== Javac used by Jenkins build ==="
-            javac -version
+                        echo "=== Javac used for build ==="
+                        javac -version
 
-            echo "=== JAVA_HOME ==="
-            echo $JAVA_HOME
+                        echo "=== JAVA_HOME ==="
+                        echo $JAVA_HOME
 
-            echo "=== Maven Java ==="
-            ./mvnw -version
+                        echo "=== Maven Java ==="
+                        ./mvnw -version
 
-            ./mvnw clean package
-        '''
-    }
-}
-
+                        echo "=== Building Spring Boot ==="
+                        ./mvnw clean package
+                    '''
+                }
+            }
+        }
     }
 
     post {
