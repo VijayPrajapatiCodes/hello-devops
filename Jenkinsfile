@@ -36,18 +36,35 @@ pipeline {
             }
         }
 
-        stage('Docker Build') {
-            steps {
-                sh '''
-                    echo "=== Docker Version ==="
-                    docker --version
+       stage('Docker Push') {
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'vijayprajapaticodes',
+                passwordVariable: 'dckr_pat_DsjnvgemKWkkP0DWpZi0aotxl6w'
+            )
+        ]) {
+            sh '''
+                echo "=== Docker Login ==="
+                echo "dckr_pat_DsjnvgemKWkkP0DWpZi0aotxl6w" | docker login \
+                    -u "vijayprajapaticodes" \
+                    --password-stdin
 
-                    echo "=== Building Docker Image ==="
-                    docker build -t hello-devops:latest .
-                '''
-            }
+                echo "=== Docker Tag ==="
+                docker tag hello-devops:latest \
+                    vijayprajapaticodes/hello-devops:latest
+
+                echo "=== Docker Push ==="
+                docker push \
+                    vijayprajapaticodes/hello-devops:latest
+
+                echo "=== Docker Logout ==="
+                docker logout
+            '''
         }
     }
+}
 
     post {
         success {
