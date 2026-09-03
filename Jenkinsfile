@@ -10,11 +10,25 @@ pipeline {
             }
         }
 
-        stage('Build') {
-            steps {
-                sh './mvnw clean package'
-            }
-        }
+stage('Build') {
+    steps {
+        sh '''
+            echo "=== Java used by Jenkins build ==="
+            java -version
+
+            echo "=== Javac used by Jenkins build ==="
+            javac -version
+
+            echo "=== JAVA_HOME ==="
+            echo $JAVA_HOME
+
+            echo "=== Maven Java ==="
+            ./mvnw -version
+
+            ./mvnw clean package
+        '''
+    }
+}
 
     }
 
