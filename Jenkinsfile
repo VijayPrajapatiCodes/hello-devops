@@ -14,13 +14,13 @@ pipeline {
             steps {
                 withEnv([
                     'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
-            'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
+                    'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
                 ]) {
                     sh '''
-                        echo "=== Java used for build ==="
+                        echo "=== Java used by Jenkins build ==="
                         java -version
 
-                        echo "=== Javac used for build ==="
+                        echo "=== Javac used by Jenkins build ==="
                         javac -version
 
                         echo "=== JAVA_HOME ==="
@@ -29,7 +29,7 @@ pipeline {
                         echo "=== Maven Java ==="
                         ./mvnw -version
 
-                        echo "=== Building Spring Boot ==="
+                        echo "=== Maven Build ==="
                         ./mvnw clean package
                     '''
                 }
