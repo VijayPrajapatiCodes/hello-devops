@@ -1,54 +1,4 @@
-pipeline {
-
-    agent any
-
-    stages {
-
-        stage('Checkout') {
-            steps {
-                echo 'Checking out source code...'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                withEnv([
-                    'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
-                    'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
-                ]) {
-                    sh '''
-                        echo "=== Java Version ==="
-                        java -version
-
-                        echo "=== Javac Version ==="
-                        javac -version
-
-                        echo "=== JAVA_HOME ==="
-                        echo $JAVA_HOME
-
-                        echo "=== Maven Version ==="
-                        ./mvnw -version
-
-                        echo "=== Maven Build ==="
-                        ./mvnw clean package
-                    '''
-                }
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                sh '''
-                    echo "=== Docker Version ==="
-                    docker --version
-
-                    echo "=== Building Docker Image ==="
-                    docker build -t hello-devops:latest .
-                '''
-            }
-        }
-
-        stage('Docker Push') {
+        stage('Deploy') {
             steps {
                 withCredentials([
                     usernamePassword(
@@ -63,13 +13,23 @@ pipeline {
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-                        echo "=== Docker Tag ==="
-                        docker tag hello-devops:latest \
+                        echo "=== Pull Latest Image ==="
+                        docker pull $DOCKER_USERNAME/hello-devops:latest
+
+                        echo "=== Stop Old Container ==="
+                        docker stop hello-devops || true
+
+                        echo "=== Remove Old Container ==="
+                        docker rm hello-devops || true
+
+                        echo "=== Start New Container ==="
+                        docker run -d \
+                            --name hello-devops \
+                            -p 8081:8080 \
                             $DOCKER_USERNAME/hello-devops:latest
 
-                        echo "=== Docker Push ==="
-                        docker push \
-                            $DOCKER_USERNAME/hello-devops:latest
+                        echo "=== Running Containers ==="
+                        docker ps
 
                         echo "=== Docker Logout ==="
                         docker logout
@@ -77,15 +37,3 @@ pipeline {
                 }
             }
         }
-    }
-
-    post {
-        success {
-            echo 'CI + Docker Build + Docker Push Successful! 🚀'
-        }
-
-        failure {
-            echo 'Pipeline Failed! ❌'
-        }
-    }
-}
