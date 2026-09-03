@@ -12,38 +12,39 @@ pipeline {
 
         stage('Build') {
             steps {
-                withEnv([
-                    'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64',
-                    'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
-                ]) {
-                    sh '''
-                        echo "=== Java used by Jenkins build ==="
-                        java -version
+                sh '''
+                    echo "=== Java Version ==="
+                    java -version
 
-                        echo "=== Javac used by Jenkins build ==="
-                        javac -version
+                    echo "=== Maven Version ==="
+                    ./mvnw -version
 
-                        echo "=== JAVA_HOME ==="
-                        echo $JAVA_HOME
+                    echo "=== Maven Build ==="
+                    ./mvnw clean package
+                '''
+            }
+        }
 
-                        echo "=== Maven Java ==="
-                        ./mvnw -version
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    echo "=== Docker Version ==="
+                    docker --version
 
-                        echo "=== Maven Build ==="
-                        ./mvnw clean package
-                    '''
-                }
+                    echo "=== Building Docker Image ==="
+                    docker build -t hello-devops:latest .
+                '''
             }
         }
     }
 
     post {
         success {
-            echo 'Build Successful! 🚀'
+            echo 'CI + Docker Image Build Successful! 🚀'
         }
 
         failure {
-            echo 'Build Failed! ❌'
+            echo 'Pipeline Failed! ❌'
         }
     }
 }
