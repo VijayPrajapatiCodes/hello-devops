@@ -36,39 +36,52 @@ pipeline {
             }
         }
 
-    stage('Docker Push') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )
-        ]) {
-            sh '''
-                echo "=== Docker Login ==="
-                echo "$DOCKER_PASSWORD" | docker login \
-                    -u "$DOCKER_USERNAME" \
-                    --password-stdin
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    echo "=== Docker Version ==="
+                    docker --version
 
-                echo "=== Docker Tag ==="
-                docker tag hello-devops:latest \
-                    $DOCKER_USERNAME/hello-devops:latest
+                    echo "=== Building Docker Image ==="
+                    docker build -t hello-devops:latest .
+                '''
+            }
+        }
 
-                echo "=== Docker Push ==="
-                docker push \
-                    $DOCKER_USERNAME/hello-devops:latest
+        stage('Docker Push') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        echo "=== Docker Login ==="
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            -u "$DOCKER_USERNAME" \
+                            --password-stdin
 
-                echo "=== Docker Logout ==="
-                docker logout
-            '''
+                        echo "=== Docker Tag ==="
+                        docker tag hello-devops:latest \
+                            $DOCKER_USERNAME/hello-devops:latest
+
+                        echo "=== Docker Push ==="
+                        docker push \
+                            $DOCKER_USERNAME/hello-devops:latest
+
+                        echo "=== Docker Logout ==="
+                        docker logout
+                    '''
+                }
+            }
         }
     }
-}
 
     post {
         success {
-            echo 'CI + Docker Image Build Successful! 🚀'
+            echo 'CI + Docker Build + Docker Push Successful! 🚀'
         }
 
         failure {
