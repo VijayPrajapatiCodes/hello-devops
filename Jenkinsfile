@@ -36,28 +36,28 @@ pipeline {
             }
         }
 
-       stage('Docker Push') {
+    stage('Docker Push') {
     steps {
         withCredentials([
             usernamePassword(
                 credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'vijayprajapaticodes',
-                passwordVariable: 'dckr_pat_DsjnvgemKWkkP0DWpZi0aotxl6w'
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
             )
         ]) {
             sh '''
                 echo "=== Docker Login ==="
-                echo "dckr_pat_DsjnvgemKWkkP0DWpZi0aotxl6w" | docker login \
-                    -u "vijayprajapaticodes" \
+                echo "$DOCKER_PASSWORD" | docker login \
+                    -u "$DOCKER_USERNAME" \
                     --password-stdin
 
                 echo "=== Docker Tag ==="
                 docker tag hello-devops:latest \
-                    vijayprajapaticodes/hello-devops:latest
+                    $DOCKER_USERNAME/hello-devops:latest
 
                 echo "=== Docker Push ==="
                 docker push \
-                    vijayprajapaticodes/hello-devops:latest
+                    $DOCKER_USERNAME/hello-devops:latest
 
                 echo "=== Docker Logout ==="
                 docker logout
