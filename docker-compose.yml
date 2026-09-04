@@ -4,7 +4,7 @@ services:
 
     container_name: hello-devops
 
-    image: vijayprajapaticodes/hello-devops:latest
+      image: ${DOCKER_USERNAME}/hello-devops:${IMAGE_TAG:-latest}
 
     ports:
       - "8081:8080"
