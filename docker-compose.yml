@@ -1,12 +1,7 @@
 services:
-
   hello-devops:
-
     container_name: hello-devops
-
-      image: ${DOCKER_USERNAME}/hello-devops:${IMAGE_TAG:-latest}
-
+    image: ${DOCKER_USERNAME}/hello-devops:${IMAGE_TAG:-latest}
     ports:
       - "8081:8080"
-
     restart: unless-stopped
