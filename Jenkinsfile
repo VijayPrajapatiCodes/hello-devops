@@ -4,12 +4,18 @@ pipeline {
 
     stages {
 
+        // =========================
+        // 1. CHECKOUT
+        // =========================
         stage('Checkout') {
             steps {
                 echo 'Checking out source code...'
             }
         }
 
+        // =========================
+        // 2. BUILD SPRING BOOT
+        // =========================
         stage('Build') {
             steps {
                 withEnv([
@@ -30,6 +36,9 @@ pipeline {
             }
         }
 
+        // =========================
+        // 3. DOCKER BUILD
+        // =========================
         stage('Docker Build') {
             steps {
                 sh '''
@@ -42,6 +51,9 @@ pipeline {
             }
         }
 
+        // =========================
+        // 4. PUSH TO DOCKER HUB
+        // =========================
         stage('Docker Push') {
             steps {
                 withCredentials([
@@ -68,12 +80,17 @@ pipeline {
                         docker push \
                             $DOCKER_USERNAME/hello-devops:latest
 
+                        echo "=== Docker Logout ==="
+
                         docker logout
                     '''
                 }
             }
         }
 
+        // =========================
+        // 5. DEPLOY TO EC2
+        // =========================
         stage('Deploy') {
             steps {
                 withCredentials([
@@ -84,33 +101,48 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        echo "=== Deploying ==="
+                        set -e
+
+                        echo "=== Docker Login ==="
 
                         echo "$DOCKER_PASSWORD" | docker login \
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-                        docker stop hello-devops || true
-                        docker rm hello-devops || true
+                        echo "=== Deploying with Docker Compose ==="
 
-                        docker pull \
-                            $DOCKER_USERNAME/hello-devops:latest
+                        cd /home/ubuntu/hello-devops
 
-                        docker run -d \
-                            --name hello-devops \
-                            -p 8081:8080 \
-                            $DOCKER_USERNAME/hello-devops:latest
+                        echo "=== Pulling Latest Image ==="
+
+                        docker compose pull
+
+                        echo "=== Starting/Recreating Container ==="
+
+                        docker compose up -d --force-recreate
+
+                        echo "=== Deployment Status ==="
+
+                        docker compose ps
+
+                        echo "=== Testing Application ==="
+
+                        curl -f http://localhost:8081/api/hello
+
+                        echo "=== Docker Logout ==="
 
                         docker logout
-
-                        echo "=== Deployment Successful ==="
                     '''
                 }
             }
         }
     }
 
+    // =========================
+    // PIPELINE RESULT
+    // =========================
     post {
+
         success {
             echo '🚀 CI/CD Pipeline Successful!'
         }
