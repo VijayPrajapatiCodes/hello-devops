@@ -52,7 +52,7 @@ pipeline {
         }
 
         // =========================
-        // 4. PUSH TO DOCKER HUB
+        // 4. DOCKER PUSH
         // =========================
         stage('Docker Push') {
             steps {
@@ -64,6 +64,8 @@ pipeline {
                     )
                 ]) {
                     sh '''
+                        set -e
+
                         echo "=== Docker Login ==="
 
                         echo "$DOCKER_PASSWORD" | docker login \
@@ -89,57 +91,62 @@ pipeline {
         }
 
         // =========================
-        // 5. DEPLOY TO EC2
+        // 5. DEPLOY
         // =========================
-       
-    // =========================
-    // PIPELINE RESULT
-    // =========================stage('Deploy') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )
-        ]) {
-            sh '''
-                set -e
+        stage('Deploy') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set -e
 
-                echo "=== Docker Login ==="
+                        echo "=== Docker Login ==="
 
-                echo "$DOCKER_PASSWORD" | docker login \
-                    -u "$DOCKER_USERNAME" \
-                    --password-stdin
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            -u "$DOCKER_USERNAME" \
+                            --password-stdin
 
-                echo "=== Deploying with Docker Compose ==="
+                        echo "=== Deploying with Docker Compose ==="
 
-                cd "$WORKSPACE"
+                        cd "$WORKSPACE"
 
-                echo "=== Current Directory ==="
-                pwd
+                        echo "=== Current Directory ==="
+                        pwd
 
-                echo "=== Docker Compose Config ==="
-                docker compose config
+                        echo "=== Files ==="
+                        ls -la
 
-                echo "=== Pulling Latest Image ==="
-                docker compose pull
+                        echo "=== Docker Compose Config ==="
+                        docker compose config
 
-                echo "=== Starting/Recreating Container ==="
-                docker compose up -d --force-recreate
+                        echo "=== Pulling Latest Image ==="
+                        docker compose pull
 
-                echo "=== Deployment Status ==="
-                docker compose ps
+                        echo "=== Starting/Recreating Container ==="
+                        docker compose up -d --force-recreate
 
-                echo "=== Testing Application ==="
-                curl -f http://localhost:8081/api/hello
+                        echo "=== Deployment Status ==="
+                        docker compose ps
 
-                echo "=== Docker Logout ==="
-                docker logout
-            '''
+                        echo "=== Testing Application ==="
+                        curl -f http://localhost:8081/api/hello
+
+                        echo "=== Docker Logout ==="
+                        docker logout
+                    '''
+                }
+            }
         }
     }
-}
+
+    // =========================
+    // PIPELINE RESULT
+    // =========================
     post {
 
         success {
