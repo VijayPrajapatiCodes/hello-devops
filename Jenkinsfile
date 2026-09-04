@@ -10,7 +10,10 @@ pipeline {
 
         stage('Checkout') {
             steps {
+
                 echo 'Checking out source code...'
+
+                checkout scm
 
                 sh '''
                     set -e
@@ -18,13 +21,78 @@ pipeline {
                     git fetch --tags --force
 
                     echo "================================="
-                    echo "        EXISTING GIT TAGS"
+                    echo "        GIT INFORMATION"
                     echo "================================="
 
+                    echo "Branch:"
+                    git branch --show-current
+
+                    echo "Commit:"
+                    git rev-parse --short HEAD
+
+                    echo "Existing Tags:"
                     git tag --sort=-v:refname | head -10 || true
                 '''
             }
         }
+
+
+        stage('Webhook Protection') {
+            steps {
+
+                script {
+
+                    def tagBuild = sh(
+                        script: '''
+                            if [ -n "${GIT_TAG_NAME:-}" ]; then
+                                echo "true"
+                            elif git describe --exact-match --tags HEAD >/dev/null 2>&1; then
+                                echo "true"
+                            else
+                                echo "false"
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    if (tagBuild == 'true') {
+
+                        echo """
+=================================
+       WEBHOOK PROTECTION
+=================================
+
+This build was triggered by a Git tag.
+
+Tag builds are not allowed to
+start another CI/CD release.
+
+Stopping pipeline safely.
+
+=================================
+"""
+
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Tag build detected. Pipeline stopped to prevent webhook loop.')
+
+                    } else {
+
+                        echo """
+=================================
+       NORMAL PUSH BUILD
+=================================
+
+This is a normal branch build.
+
+CI/CD will continue.
+
+=================================
+"""
+                    }
+                }
+            }
+        }
+
 
         stage('Calculate Version') {
             steps {
@@ -38,6 +106,7 @@ pipeline {
                         ''',
                         returnStdout: true
                     ).trim()
+
 
                     if (!latestTag) {
 
@@ -55,8 +124,10 @@ pipeline {
                         env.VERSION = "${major}.${minor}.${patch}"
                     }
 
+
                     env.GIT_TAG = "v${env.VERSION}"
                     env.IMAGE_TAG = env.VERSION
+
 
                     echo """
 =================================
@@ -80,6 +151,7 @@ ${env.IMAGE_TAG}
                 }
             }
         }
+
 
         stage('Build') {
             steps {
@@ -118,6 +190,7 @@ ${env.IMAGE_TAG}
             }
         }
 
+
         stage('Docker Build') {
             steps {
 
@@ -144,6 +217,7 @@ ${env.IMAGE_TAG}
             }
         }
 
+
         stage('Docker Push') {
             steps {
 
@@ -166,6 +240,7 @@ ${env.IMAGE_TAG}
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
+
                         echo "================================="
                         echo "        DOCKER TAG"
                         echo "================================="
@@ -178,12 +253,14 @@ ${env.IMAGE_TAG}
                             "$IMAGE_NAME:latest" \
                             "$DOCKER_USERNAME/$IMAGE_NAME:latest"
 
+
                         echo "================================="
                         echo "        PUSH VERSION"
                         echo "================================="
 
                         docker push \
                             "$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
+
 
                         echo "================================="
                         echo "        PUSH LATEST"
@@ -192,11 +269,9 @@ ${env.IMAGE_TAG}
                         docker push \
                             "$DOCKER_USERNAME/$IMAGE_NAME:latest"
 
-                        echo "================================="
-                        echo "        DOCKER LOGOUT"
-                        echo "================================="
 
                         docker logout
+
 
                         echo "================================="
                         echo "     DOCKER PUSH SUCCESSFUL"
@@ -205,6 +280,7 @@ ${env.IMAGE_TAG}
                 }
             }
         }
+
 
         stage('Create Git Tag') {
             steps {
@@ -227,32 +303,42 @@ ${env.IMAGE_TAG}
                         git config user.name "Jenkins"
                         git config user.email "jenkins@localhost"
 
+
                         git tag -a "$GIT_TAG" \
                             -m "Release $GIT_TAG"
 
+
                         echo "Git tag created:"
                         git tag -l "$GIT_TAG"
+
 
                         echo "================================="
                         echo "       PUSHING GIT TAG"
                         echo "================================="
 
+
                         cat > "$WORKSPACE/git-askpass.sh" <<'EOF'
 #!/bin/sh
+
 case "$1" in
     *Username*) echo "$GITHUB_USERNAME" ;;
     *Password*) echo "$GITHUB_TOKEN" ;;
 esac
 EOF
 
+
                         chmod 700 "$WORKSPACE/git-askpass.sh"
+
 
                         export GIT_ASKPASS="$WORKSPACE/git-askpass.sh"
                         export GIT_TERMINAL_PROMPT=0
 
+
                         git push origin "$GIT_TAG"
 
+
                         rm -f "$WORKSPACE/git-askpass.sh"
+
 
                         echo "================================="
                         echo "       GIT TAG PUSHED"
@@ -261,6 +347,7 @@ EOF
                 }
             }
         }
+
 
         stage('Deploy') {
             steps {
@@ -283,17 +370,21 @@ EOF
                         echo "Deploying Version:"
                         echo "$IMAGE_TAG"
 
+
                         echo "=== Docker Login ==="
 
                         echo "$DOCKER_PASSWORD" | docker login \
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
+
                         cd "$WORKSPACE"
+
 
                         echo "=== Deployment Directory ==="
 
                         pwd
+
 
                         echo "=== Checking Compose File ==="
 
@@ -301,17 +392,21 @@ EOF
 
                         echo "docker-compose.yml found"
 
+
                         echo "=== Setting Deployment Version ==="
 
                         export IMAGE_TAG="$IMAGE_TAG"
                         export DOCKER_USERNAME="$DOCKER_USERNAME"
 
+
                         echo "Docker Image:"
                         echo "$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
+
 
                         echo "=== Docker Compose Config ==="
 
                         docker compose config
+
 
                         echo "=== Stopping Existing Compose Application ==="
 
@@ -319,14 +414,17 @@ EOF
                             --remove-orphans \
                             2>/dev/null || true
 
+
                         echo "=== Removing Existing hello-devops Container ==="
 
                         docker rm -f hello-devops \
                             2>/dev/null || true
 
+
                         echo "=== Checking Docker Containers Using Port 8081 ==="
 
                         PORT_CONTAINERS=$(docker ps -aq --filter "publish=8081")
+
 
                         if [ -n "$PORT_CONTAINERS" ]; then
 
@@ -341,6 +439,7 @@ EOF
 
                         fi
 
+
                         echo "=== Checking HOST Port 8081 ==="
 
                         if sudo -n fuser 8081/tcp >/dev/null 2>&1; then
@@ -352,6 +451,7 @@ EOF
                             sleep 3
 
                         fi
+
 
                         echo "=== Final Port Verification ==="
 
@@ -365,11 +465,14 @@ EOF
 
                         fi
 
+
                         echo "Port 8081 is completely free"
+
 
                         echo "=== Pulling Versioned Image ==="
 
                         docker compose pull
+
 
                         echo "=== Starting Version $IMAGE_TAG ==="
 
@@ -377,27 +480,34 @@ EOF
                             --force-recreate \
                             --remove-orphans
 
+
                         echo "=== Deployment Status ==="
 
                         docker compose ps
 
+
                         echo "=== Waiting For Application ==="
 
                         sleep 10
+
 
                         echo "=== Application Health Check ==="
 
                         curl -f \
                             http://localhost:8081/api/hello
 
+
                         echo ""
+
 
                         echo "================================="
                         echo "     DEPLOYMENT SUCCESSFUL"
                         echo "================================="
 
+
                         echo "Deployed Version:"
                         echo "$IMAGE_TAG"
+
 
                         docker logout
                     '''
@@ -405,6 +515,7 @@ EOF
             }
         }
     }
+
 
     post {
 
@@ -438,6 +549,7 @@ Application Running
 =================================
 '''
         }
+
 
         failure {
 
