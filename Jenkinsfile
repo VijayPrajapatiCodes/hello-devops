@@ -4,19 +4,12 @@ pipeline {
 
     stages {
 
-        // =========================================
-        // 1. CHECKOUT
-        // =========================================
         stage('Checkout') {
             steps {
                 echo 'Checking out source code...'
             }
         }
 
-
-        // =========================================
-        // 2. BUILD SPRING BOOT APPLICATION
-        // =========================================
         stage('Build') {
             steps {
 
@@ -34,20 +27,17 @@ pipeline {
 
                         java -version
 
-
                         echo "================================="
                         echo "        MAVEN VERSION"
                         echo "================================="
 
                         ./mvnw -version
 
-
                         echo "================================="
                         echo "        MAVEN BUILD"
                         echo "================================="
 
                         ./mvnw clean package
-
 
                         echo "================================="
                         echo "        BUILD SUCCESSFUL"
@@ -57,10 +47,6 @@ pipeline {
             }
         }
 
-
-        // =========================================
-        // 3. BUILD DOCKER IMAGE
-        // =========================================
         stage('Docker Build') {
             steps {
 
@@ -73,15 +59,11 @@ pipeline {
 
                     docker --version
 
-
                     echo "================================="
                     echo "        DOCKER BUILD"
                     echo "================================="
 
-                    docker build \
-                        -t hello-devops:latest \
-                        .
-
+                    docker build -t hello-devops:latest .
 
                     echo "================================="
                     echo "   DOCKER BUILD SUCCESSFUL"
@@ -90,10 +72,6 @@ pipeline {
             }
         }
 
-
-        // =========================================
-        // 4. PUSH IMAGE TO DOCKER HUB
-        // =========================================
         stage('Docker Push') {
             steps {
 
@@ -116,30 +94,26 @@ pipeline {
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-
                         echo "================================="
                         echo "        DOCKER TAG"
                         echo "================================="
 
                         docker tag \
                             hello-devops:latest \
-                            $DOCKER_USERNAME/hello-devops:latest
-
+                            "$DOCKER_USERNAME/hello-devops:latest"
 
                         echo "================================="
                         echo "        DOCKER PUSH"
                         echo "================================="
 
                         docker push \
-                            $DOCKER_USERNAME/hello-devops:latest
-
+                            "$DOCKER_USERNAME/hello-devops:latest"
 
                         echo "================================="
                         echo "        DOCKER LOGOUT"
                         echo "================================="
 
                         docker logout
-
 
                         echo "================================="
                         echo "     DOCKER PUSH SUCCESSFUL"
@@ -149,10 +123,6 @@ pipeline {
             }
         }
 
-
-        // =========================================
-        // 5. DEPLOY TO EC2
-        // =========================================
         stage('Deploy') {
             steps {
 
@@ -171,178 +141,121 @@ pipeline {
                         echo "       STARTING DEPLOYMENT"
                         echo "================================="
 
-
-                        // ---------------------------------
-                        // Docker Login
-                        // ---------------------------------
-
+                        # Docker login
                         echo "=== Docker Login ==="
 
                         echo "$DOCKER_PASSWORD" | docker login \
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-
-                        // ---------------------------------
-                        // Go To Jenkins Workspace
-                        // ---------------------------------
-
+                        # Go to Jenkins workspace
                         echo "=== Deployment Directory ==="
 
                         cd "$WORKSPACE"
 
                         echo "Current Directory:"
-
                         pwd
 
-
-                        // ---------------------------------
-                        // Check Compose File
-                        // ---------------------------------
-
+                        # Check docker-compose.yml
                         echo "=== Checking Compose File ==="
 
                         test -f docker-compose.yml
 
-                        echo "docker-compose.yml found ✅"
+                        echo "docker-compose.yml found"
 
-
-                        // ---------------------------------
-                        // Validate Compose
-                        // ---------------------------------
-
+                        # Validate compose file
                         echo "=== Docker Compose Config ==="
 
                         docker compose config
 
-
-                        // ---------------------------------
-                        // Stop Existing Compose Application
-                        // ---------------------------------
-
+                        # Stop containers managed by this compose project
                         echo "=== Stopping Existing Compose Application ==="
 
                         docker compose down \
                             --remove-orphans \
                             2>/dev/null || true
 
-
-                        // ---------------------------------
-                        // Remove OLD hello-devops Container
-                        // ---------------------------------
-
+                        # Remove old container with fixed name
                         echo "=== Removing Existing hello-devops Container ==="
 
                         docker rm -f hello-devops \
                             2>/dev/null || true
 
-                        echo "hello-devops cleanup completed ✅"
+                        echo "hello-devops cleanup completed"
 
-
-                        // ---------------------------------
-                        // Find ANY Container Using Port 8081
-                        // ---------------------------------
-
+                        # Find every Docker container using port 8081
                         echo "=== Checking Port 8081 ==="
 
                         PORT_CONTAINERS=$(docker ps -aq --filter "publish=8081")
 
                         if [ -n "$PORT_CONTAINERS" ]; then
 
-                            echo "⚠️ Containers found using port 8081:"
+                            echo "Containers using port 8081:"
                             echo "$PORT_CONTAINERS"
 
                             echo "=== Removing Containers Using Port 8081 ==="
 
                             docker rm -f $PORT_CONTAINERS
 
-                            echo "Port 8081 Docker containers removed ✅"
+                            echo "Port 8081 containers removed"
 
                         else
 
-                            echo "Port 8081 is free from Docker containers ✅"
+                            echo "Port 8081 is free from Docker containers"
 
                         fi
 
-
-                        // ---------------------------------
-                        // Verify Port 8081
-                        // ---------------------------------
-
+                        # Verify Docker port is free
                         echo "=== Verifying Port 8081 ==="
 
                         if docker ps --format '{{.Ports}}' | grep -q '0.0.0.0:8081->'; then
 
-                            echo "❌ ERROR: Port 8081 is still occupied by Docker."
+                            echo "ERROR: Port 8081 is still occupied by Docker"
 
-                            docker ps --format 'table {{.ID}}\\t{{.Names}}\\t{{.Ports}}'
+                            docker ps \
+                                --format 'table {{.ID}}\\t{{.Names}}\\t{{.Ports}}'
 
                             exit 1
 
                         fi
 
-                        echo "Port 8081 is free ✅"
+                        echo "Port 8081 is free"
 
-
-                        // ---------------------------------
-                        // Pull Latest Image
-                        // ---------------------------------
-
+                        # Pull latest image
                         echo "=== Pulling Latest Docker Image ==="
 
                         docker compose pull
 
-
-                        // ---------------------------------
-                        // Start Application
-                        // ---------------------------------
-
+                        # Start latest application
                         echo "=== Starting Latest Application ==="
 
                         docker compose up -d \
                             --force-recreate \
                             --remove-orphans
 
-
-                        // ---------------------------------
-                        // Deployment Status
-                        // ---------------------------------
-
+                        # Show deployment status
                         echo "=== Deployment Status ==="
 
                         docker compose ps
 
-
-                        // ---------------------------------
-                        // Wait For Application
-                        // ---------------------------------
-
+                        # Wait for application
                         echo "=== Waiting For Application ==="
 
                         sleep 10
 
-
-                        // ---------------------------------
-                        // Health Check
-                        // ---------------------------------
-
+                        # Health check
                         echo "=== Application Health Check ==="
 
                         curl -f \
                             http://localhost:8081/api/hello
 
-
                         echo ""
 
                         echo "================================="
-                        echo "     DEPLOYMENT SUCCESSFUL 🚀"
+                        echo "     DEPLOYMENT SUCCESSFUL"
                         echo "================================="
 
-
-                        // ---------------------------------
-                        // Docker Logout
-                        // ---------------------------------
-
+                        # Logout
                         echo "=== Docker Logout ==="
 
                         docker logout
@@ -352,17 +265,12 @@ pipeline {
         }
     }
 
-
-    // =========================================
-    // POST ACTIONS
-    // =========================================
     post {
 
         success {
-
             echo '''
 =================================
-      CI/CD SUCCESSFUL 🚀
+      CI/CD SUCCESSFUL
 =================================
 
 GitHub
@@ -377,16 +285,15 @@ Docker Hub
    ↓
 EC2 Deployment
    ↓
-Application Running ✅
+Application Running
 =================================
 '''
         }
 
         failure {
-
             echo '''
 =================================
-       CI/CD FAILED ❌
+       CI/CD FAILED
 =================================
 
 Check the failed stage
