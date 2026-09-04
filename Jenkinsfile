@@ -23,6 +23,8 @@ pipeline {
                     'PATH+JAVA=/usr/lib/jvm/java-17-openjdk-amd64/bin'
                 ]) {
                     sh '''
+                        set -e
+
                         echo "=== Java Version ==="
                         java -version
 
@@ -42,6 +44,8 @@ pipeline {
         stage('Docker Build') {
             steps {
                 sh '''
+                    set -e
+
                     echo "=== Docker Version ==="
                     docker --version
 
@@ -105,38 +109,70 @@ pipeline {
                     sh '''
                         set -e
 
+                        echo "================================="
+                        echo "       STARTING DEPLOYMENT"
+                        echo "================================="
+
                         echo "=== Docker Login ==="
 
                         echo "$DOCKER_PASSWORD" | docker login \
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-                        echo "=== Deploying with Docker Compose ==="
+                        echo "=== Deployment Directory ==="
 
                         cd "$WORKSPACE"
 
-                        echo "=== Current Directory ==="
+                        echo "Current Directory:"
                         pwd
 
-                        echo "=== Files ==="
-                        ls -la
+                        echo "=== Checking Compose File ==="
+
+                        test -f docker-compose.yml
+
+                        echo "docker-compose.yml found ✅"
 
                         echo "=== Docker Compose Config ==="
+
                         docker compose config
 
-                        echo "=== Pulling Latest Image ==="
+                        echo "=== Pulling Latest Docker Image ==="
+
                         docker compose pull
 
-                        echo "=== Starting/Recreating Container ==="
-                        docker compose up -d --force-recreate
+                        echo "=== Removing Previous Container ==="
+
+                        docker rm -f hello-devops 2>/dev/null || true
+
+                        echo "Previous container cleanup completed ✅"
+
+                        echo "=== Removing Orphan Containers ==="
+
+                        docker compose down --remove-orphans 2>/dev/null || true
+
+                        echo "=== Starting Latest Application ==="
+
+                        docker compose up -d --force-recreate --remove-orphans
 
                         echo "=== Deployment Status ==="
+
                         docker compose ps
 
-                        echo "=== Testing Application ==="
+                        echo "=== Waiting for Application ==="
+
+                        sleep 10
+
+                        echo "=== Application Health Check ==="
+
                         curl -f http://localhost:8081/api/hello
 
+                        echo ""
+                        echo "================================="
+                        echo "     DEPLOYMENT SUCCESSFUL 🚀"
+                        echo "================================="
+
                         echo "=== Docker Logout ==="
+
                         docker logout
                     '''
                 }
@@ -151,10 +187,12 @@ pipeline {
 
         success {
             echo '🚀 CI/CD Pipeline Successful!'
+            echo 'Application deployed successfully to EC2.'
         }
 
         failure {
-            echo '❌ Pipeline Failed!'
+            echo '❌ CI/CD Pipeline Failed!'
+            echo 'Check the failed stage in Console Output.'
         }
     }
 }
