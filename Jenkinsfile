@@ -8,6 +8,10 @@ pipeline {
 
     stages {
 
+        // =====================================================
+        // 1. CHECKOUT
+        // =====================================================
+
         stage('Checkout') {
             steps {
 
@@ -36,6 +40,10 @@ pipeline {
             }
         }
 
+
+        // =====================================================
+        // 2. WEBHOOK PROTECTION
+        // =====================================================
 
         stage('Webhook Protection') {
             steps {
@@ -73,13 +81,16 @@ Stopping pipeline safely.
 """
 
                         currentBuild.result = 'NOT_BUILT'
-                        error('Tag build detected. Pipeline stopped to prevent webhook loop.')
+
+                        error(
+                            'Tag build detected. Pipeline stopped to prevent webhook loop.'
+                        )
 
                     } else {
 
                         echo """
 =================================
-       NORMAL PUSH BUILD
+         NORMAL PUSH BUILD
 =================================
 
 This is a normal branch build.
@@ -94,6 +105,10 @@ CI/CD will continue.
         }
 
 
+        // =====================================================
+        // 3. CALCULATE VERSION
+        // =====================================================
+
         stage('Calculate Version') {
             steps {
 
@@ -107,14 +122,22 @@ CI/CD will continue.
                         returnStdout: true
                     ).trim()
 
+                    // First release
 
                     if (!latestTag) {
 
                         env.VERSION = '1.0.0'
+                        env.PREVIOUS_VERSION = ''
 
                     } else {
 
+                        // Example:
+                        // v1.0.5
+                        //   ↓
+                        // 1.0.5
+
                         def version = latestTag.substring(1)
+
                         def parts = version.tokenize('.')
 
                         def major = parts[0].toInteger()
@@ -122,12 +145,16 @@ CI/CD will continue.
                         def patch = parts[2].toInteger() + 1
 
                         env.VERSION = "${major}.${minor}.${patch}"
+
+                        // Previous production version
+                        env.PREVIOUS_VERSION = version
                     }
 
-
+                    // Git tag
                     env.GIT_TAG = "v${env.VERSION}"
-                    env.IMAGE_TAG = env.VERSION
 
+                    // Docker tag
+                    env.IMAGE_TAG = env.VERSION
 
                     echo """
 =================================
@@ -136,6 +163,9 @@ CI/CD will continue.
 
 Previous Git Tag:
 ${latestTag ?: 'NONE'}
+
+Previous Deploy Version:
+${env.PREVIOUS_VERSION ?: 'NONE'}
 
 New Version:
 ${env.VERSION}
@@ -152,6 +182,10 @@ ${env.IMAGE_TAG}
             }
         }
 
+
+        // =====================================================
+        // 4. MAVEN BUILD
+        // =====================================================
 
         stage('Build') {
             steps {
@@ -191,6 +225,10 @@ ${env.IMAGE_TAG}
         }
 
 
+        // =====================================================
+        // 5. DOCKER BUILD
+        // =====================================================
+
         stage('Docker Build') {
             steps {
 
@@ -218,6 +256,10 @@ ${env.IMAGE_TAG}
         }
 
 
+        // =====================================================
+        // 6. DOCKER PUSH
+        // =====================================================
+
         stage('Docker Push') {
             steps {
 
@@ -240,7 +282,6 @@ ${env.IMAGE_TAG}
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-
                         echo "================================="
                         echo "        DOCKER TAG"
                         echo "================================="
@@ -253,14 +294,12 @@ ${env.IMAGE_TAG}
                             "$IMAGE_NAME:latest" \
                             "$DOCKER_USERNAME/$IMAGE_NAME:latest"
 
-
                         echo "================================="
                         echo "        PUSH VERSION"
                         echo "================================="
 
                         docker push \
                             "$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
-
 
                         echo "================================="
                         echo "        PUSH LATEST"
@@ -269,9 +308,7 @@ ${env.IMAGE_TAG}
                         docker push \
                             "$DOCKER_USERNAME/$IMAGE_NAME:latest"
 
-
                         docker logout
-
 
                         echo "================================="
                         echo "     DOCKER PUSH SUCCESSFUL"
@@ -281,6 +318,10 @@ ${env.IMAGE_TAG}
             }
         }
 
+
+        // =====================================================
+        // 7. CREATE GIT TAG
+        // =====================================================
 
         stage('Create Git Tag') {
             steps {
@@ -301,21 +342,19 @@ ${env.IMAGE_TAG}
                         echo "================================="
 
                         git config user.name "Jenkins"
-                        git config user.email "jenkins@localhost"
 
+                        git config user.email "jenkins@localhost"
 
                         git tag -a "$GIT_TAG" \
                             -m "Release $GIT_TAG"
 
-
                         echo "Git tag created:"
-                        git tag -l "$GIT_TAG"
 
+                        git tag -l "$GIT_TAG"
 
                         echo "================================="
                         echo "       PUSHING GIT TAG"
                         echo "================================="
-
 
                         cat > "$WORKSPACE/git-askpass.sh" <<'EOF'
 #!/bin/sh
@@ -326,19 +365,15 @@ case "$1" in
 esac
 EOF
 
-
                         chmod 700 "$WORKSPACE/git-askpass.sh"
 
-
                         export GIT_ASKPASS="$WORKSPACE/git-askpass.sh"
-                        export GIT_TERMINAL_PROMPT=0
 
+                        export GIT_TERMINAL_PROMPT=0
 
                         git push origin "$GIT_TAG"
 
-
                         rm -f "$WORKSPACE/git-askpass.sh"
-
 
                         echo "================================="
                         echo "       GIT TAG PUSHED"
@@ -348,6 +383,10 @@ EOF
             }
         }
 
+
+        // =====================================================
+        // 8. DEPLOY + HEALTH CHECK + AUTOMATIC ROLLBACK
+        // =====================================================
 
         stage('Deploy') {
             steps {
@@ -370,6 +409,13 @@ EOF
                         echo "Deploying Version:"
                         echo "$IMAGE_TAG"
 
+                        echo "Previous Version:"
+                        echo "${PREVIOUS_VERSION:-NONE}"
+
+
+                        # =====================================
+                        # DOCKER LOGIN
+                        # =====================================
 
                         echo "=== Docker Login ==="
 
@@ -378,13 +424,20 @@ EOF
                             --password-stdin
 
 
-                        cd "$WORKSPACE"
+                        # =====================================
+                        # DEPLOYMENT DIRECTORY
+                        # =====================================
 
+                        cd "$WORKSPACE"
 
                         echo "=== Deployment Directory ==="
 
                         pwd
 
+
+                        # =====================================
+                        # CHECK COMPOSE FILE
+                        # =====================================
 
                         echo "=== Checking Compose File ==="
 
@@ -393,20 +446,33 @@ EOF
                         echo "docker-compose.yml found"
 
 
+                        # =====================================
+                        # SET VERSION
+                        # =====================================
+
                         echo "=== Setting Deployment Version ==="
 
                         export IMAGE_TAG="$IMAGE_TAG"
+
                         export DOCKER_USERNAME="$DOCKER_USERNAME"
 
-
                         echo "Docker Image:"
+
                         echo "$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
 
+
+                        # =====================================
+                        # COMPOSE CONFIG VALIDATION
+                        # =====================================
 
                         echo "=== Docker Compose Config ==="
 
                         docker compose config
 
+
+                        # =====================================
+                        # STOP EXISTING APPLICATION
+                        # =====================================
 
                         echo "=== Stopping Existing Compose Application ==="
 
@@ -415,20 +481,28 @@ EOF
                             2>/dev/null || true
 
 
+                        # =====================================
+                        # REMOVE EXISTING CONTAINER
+                        # =====================================
+
                         echo "=== Removing Existing hello-devops Container ==="
 
                         docker rm -f hello-devops \
                             2>/dev/null || true
 
 
+                        # =====================================
+                        # CHECK DOCKER PORT
+                        # =====================================
+
                         echo "=== Checking Docker Containers Using Port 8081 ==="
 
                         PORT_CONTAINERS=$(docker ps -aq --filter "publish=8081")
 
-
                         if [ -n "$PORT_CONTAINERS" ]; then
 
                             echo "Containers using port 8081:"
+
                             echo "$PORT_CONTAINERS"
 
                             docker rm -f $PORT_CONTAINERS
@@ -439,6 +513,10 @@ EOF
 
                         fi
 
+
+                        # =====================================
+                        # CHECK HOST PORT
+                        # =====================================
 
                         echo "=== Checking HOST Port 8081 ==="
 
@@ -453,6 +531,10 @@ EOF
                         fi
 
 
+                        # =====================================
+                        # FINAL PORT CHECK
+                        # =====================================
+
                         echo "=== Final Port Verification ==="
 
                         if sudo -n fuser 8081/tcp >/dev/null 2>&1; then
@@ -465,14 +547,21 @@ EOF
 
                         fi
 
-
                         echo "Port 8081 is completely free"
 
+
+                        # =====================================
+                        # PULL NEW IMAGE
+                        # =====================================
 
                         echo "=== Pulling Versioned Image ==="
 
                         docker compose pull
 
+
+                        # =====================================
+                        # START NEW VERSION
+                        # =====================================
 
                         echo "=== Starting Version $IMAGE_TAG ==="
 
@@ -481,35 +570,220 @@ EOF
                             --remove-orphans
 
 
+                        # =====================================
+                        # DEPLOYMENT STATUS
+                        # =====================================
+
                         echo "=== Deployment Status ==="
 
                         docker compose ps
 
+
+                        # =====================================
+                        # WAIT FOR APPLICATION
+                        # =====================================
 
                         echo "=== Waiting For Application ==="
 
                         sleep 10
 
 
+                        # =====================================
+                        # HEALTH CHECK
+                        # =====================================
+
                         echo "=== Application Health Check ==="
 
-                        curl -f \
+                        if curl -f --max-time 10 \
                             http://localhost:8081/api/hello
+                        then
+
+                            echo ""
+
+                            echo "================================="
+
+                            echo "     HEALTH CHECK PASSED"
+
+                            echo "================================="
+
+                            echo "Deployed Version:"
+
+                            echo "$IMAGE_TAG"
+
+                            echo ""
+
+                            echo "================================="
+
+                            echo "     DEPLOYMENT SUCCESSFUL"
+
+                            echo "================================="
+
+                            docker logout
+
+                        else
+
+                            # =================================
+                            # HEALTH CHECK FAILED
+                            # =================================
+
+                            echo ""
+
+                            echo "================================="
+
+                            echo "     HEALTH CHECK FAILED"
+
+                            echo "================================="
+
+                            echo "New Version:"
+
+                            echo "$IMAGE_TAG"
+
+                            echo "Previous Version:"
+
+                            echo "${PREVIOUS_VERSION:-NONE}"
 
 
-                        echo ""
+                            # =================================
+                            # NO PREVIOUS VERSION
+                            # =================================
+
+                            if [ -z "${PREVIOUS_VERSION:-}" ]; then
+
+                                echo ""
+
+                                echo "No previous version available."
+
+                                echo "Rollback cannot be performed."
+
+                                docker logout
+
+                                exit 1
+
+                            fi
 
 
-                        echo "================================="
-                        echo "     DEPLOYMENT SUCCESSFUL"
-                        echo "================================="
+                            # =================================
+                            # START ROLLBACK
+                            # =================================
+
+                            echo ""
+
+                            echo "================================="
+
+                            echo "       STARTING ROLLBACK"
+
+                            echo "================================="
+
+                            echo "Rolling back to:"
+
+                            echo "$PREVIOUS_VERSION"
 
 
-                        echo "Deployed Version:"
-                        echo "$IMAGE_TAG"
+                            # =================================
+                            # STOP FAILED VERSION
+                            # =================================
+
+                            echo "=== Stopping Failed Version ==="
+
+                            docker compose down \
+                                --remove-orphans \
+                                2>/dev/null || true
 
 
-                        docker logout
+                            # =================================
+                            # SET PREVIOUS VERSION
+                            # =================================
+
+                            echo "=== Setting Previous Version ==="
+
+                            export IMAGE_TAG="$PREVIOUS_VERSION"
+
+                            export DOCKER_USERNAME="$DOCKER_USERNAME"
+
+                            echo "Rollback Image:"
+
+                            echo "$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
+
+
+                            # =================================
+                            # PULL PREVIOUS IMAGE
+                            # =================================
+
+                            echo "=== Pulling Previous Image ==="
+
+                            docker compose pull
+
+
+                            # =================================
+                            # START PREVIOUS VERSION
+                            # =================================
+
+                            echo "=== Starting Previous Version ==="
+
+                            docker compose up -d \
+                                --force-recreate \
+                                --remove-orphans
+
+
+                            # =================================
+                            # WAIT FOR ROLLBACK
+                            # =================================
+
+                            echo "=== Waiting For Rollback Application ==="
+
+                            sleep 10
+
+
+                            # =================================
+                            # ROLLBACK HEALTH CHECK
+                            # =================================
+
+                            echo "=== Rollback Health Check ==="
+
+                            if curl -f --max-time 10 \
+                                http://localhost:8081/api/hello
+                            then
+
+                                echo ""
+
+                                echo "================================="
+
+                                echo "       ROLLBACK SUCCESSFUL"
+
+                                echo "================================="
+
+                                echo "Running Version:"
+
+                                echo "$PREVIOUS_VERSION"
+
+                                docker compose ps
+
+                                docker logout
+
+                                # Pipeline remains FAILED
+                                # because the new release failed.
+
+                                exit 1
+
+                            else
+
+                                echo ""
+
+                                echo "================================="
+
+                                echo "     ROLLBACK ALSO FAILED"
+
+                                echo "================================="
+
+                                docker compose ps
+
+                                docker logout
+
+                                exit 1
+
+                            fi
+
+                        fi
                     '''
                 }
             }
@@ -517,13 +791,17 @@ EOF
     }
 
 
+    // =========================================================
+    // POST ACTIONS
+    // =========================================================
+
     post {
 
         success {
 
             echo '''
 =================================
-      CI/CD SUCCESSFUL
+       CI/CD SUCCESSFUL
 =================================
 
 GitHub
@@ -544,6 +822,8 @@ Versioned Image
    ↓
 AWS EC2
    ↓
+Health Check
+   ↓
 Application Running
 
 =================================
@@ -555,8 +835,18 @@ Application Running
 
             echo '''
 =================================
-       CI/CD FAILED
+         CI/CD FAILED
 =================================
+
+Possible reasons:
+
+- Build failed
+- Docker build failed
+- Docker push failed
+- Git tag failed
+- Deployment failed
+- Health check failed
+- Rollback executed
 
 Check the failed stage
 in Jenkins Console Output.
