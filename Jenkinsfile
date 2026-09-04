@@ -91,56 +91,55 @@ pipeline {
         // =========================
         // 5. DEPLOY TO EC2
         // =========================
-        stage('Deploy') {
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USERNAME',
-                        passwordVariable: 'DOCKER_PASSWORD'
-                    )
-                ]) {
-                    sh '''
-                        set -e
-
-                        echo "=== Docker Login ==="
-
-                        echo "$DOCKER_PASSWORD" | docker login \
-                            -u "$DOCKER_USERNAME" \
-                            --password-stdin
-
-                        echo "=== Deploying with Docker Compose ==="
-
-                        cd /home/ubuntu/hello-devops
-
-                        echo "=== Pulling Latest Image ==="
-
-                        docker compose pull
-
-                        echo "=== Starting/Recreating Container ==="
-
-                        docker compose up -d --force-recreate
-
-                        echo "=== Deployment Status ==="
-
-                        docker compose ps
-
-                        echo "=== Testing Application ==="
-
-                        curl -f http://localhost:8081/api/hello
-
-                        echo "=== Docker Logout ==="
-
-                        docker logout
-                    '''
-                }
-            }
-        }
-    }
-
+       
     // =========================
     // PIPELINE RESULT
-    // =========================
+    // =========================stage('Deploy') {
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )
+        ]) {
+            sh '''
+                set -e
+
+                echo "=== Docker Login ==="
+
+                echo "$DOCKER_PASSWORD" | docker login \
+                    -u "$DOCKER_USERNAME" \
+                    --password-stdin
+
+                echo "=== Deploying with Docker Compose ==="
+
+                cd "$WORKSPACE"
+
+                echo "=== Current Directory ==="
+                pwd
+
+                echo "=== Docker Compose Config ==="
+                docker compose config
+
+                echo "=== Pulling Latest Image ==="
+                docker compose pull
+
+                echo "=== Starting/Recreating Container ==="
+                docker compose up -d --force-recreate
+
+                echo "=== Deployment Status ==="
+                docker compose ps
+
+                echo "=== Testing Application ==="
+                curl -f http://localhost:8081/api/hello
+
+                echo "=== Docker Logout ==="
+                docker logout
+            '''
+        }
+    }
+}
     post {
 
         success {
