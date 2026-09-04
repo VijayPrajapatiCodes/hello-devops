@@ -141,14 +141,14 @@ pipeline {
                         echo "       STARTING DEPLOYMENT"
                         echo "================================="
 
-                        # Docker login
+
                         echo "=== Docker Login ==="
 
                         echo "$DOCKER_PASSWORD" | docker login \
                             -u "$DOCKER_USERNAME" \
                             --password-stdin
 
-                        # Go to Jenkins workspace
+
                         echo "=== Deployment Directory ==="
 
                         cd "$WORKSPACE"
@@ -156,26 +156,26 @@ pipeline {
                         echo "Current Directory:"
                         pwd
 
-                        # Check docker-compose.yml
+
                         echo "=== Checking Compose File ==="
 
                         test -f docker-compose.yml
 
                         echo "docker-compose.yml found"
 
-                        # Validate compose file
+
                         echo "=== Docker Compose Config ==="
 
                         docker compose config
 
-                        # Stop containers managed by this compose project
+
                         echo "=== Stopping Existing Compose Application ==="
 
                         docker compose down \
                             --remove-orphans \
                             2>/dev/null || true
 
-                        # Remove old container with fixed name
+
                         echo "=== Removing Existing hello-devops Container ==="
 
                         docker rm -f hello-devops \
@@ -183,8 +183,8 @@ pipeline {
 
                         echo "hello-devops cleanup completed"
 
-                        # Find every Docker container using port 8081
-                        echo "=== Checking Port 8081 ==="
+
+                        echo "=== Checking Docker Containers Using Port 8081 ==="
 
                         PORT_CONTAINERS=$(docker ps -aq --filter "publish=8081")
 
@@ -197,57 +197,84 @@ pipeline {
 
                             docker rm -f $PORT_CONTAINERS
 
-                            echo "Port 8081 containers removed"
+                            echo "Docker port cleanup completed"
 
                         else
 
-                            echo "Port 8081 is free from Docker containers"
+                            echo "No Docker container is using port 8081"
 
                         fi
 
-                        # Verify Docker port is free
-                        echo "=== Verifying Port 8081 ==="
 
-                        if docker ps --format '{{.Ports}}' | grep -q '0.0.0.0:8081->'; then
+                        echo "=== Checking HOST Port 8081 ==="
 
-                            echo "ERROR: Port 8081 is still occupied by Docker"
+                        if sudo -n fuser 8081/tcp >/dev/null 2>&1; then
 
-                            docker ps \
-                                --format 'table {{.ID}}\\t{{.Names}}\\t{{.Ports}}'
+                            echo "WARNING: Host port 8081 is occupied."
+
+                            echo "Process using port 8081:"
+
+                            sudo -n fuser -v 8081/tcp || true
+
+                            echo "=== Freeing HOST Port 8081 ==="
+
+                            sudo -n fuser -k 8081/tcp
+
+                            sleep 3
+
+                            echo "Host port cleanup completed"
+
+                        else
+
+                            echo "Host port 8081 is already free"
+
+                        fi
+
+
+                        echo "=== Final Port Verification ==="
+
+                        if sudo -n fuser 8081/tcp >/dev/null 2>&1; then
+
+                            echo "================================="
+                            echo " ERROR: PORT 8081 STILL OCCUPIED"
+                            echo "================================="
+
+                            sudo -n fuser -v 8081/tcp || true
 
                             exit 1
 
                         fi
 
-                        echo "Port 8081 is free"
+                        echo "Port 8081 is completely free"
 
-                        # Pull latest image
+
                         echo "=== Pulling Latest Docker Image ==="
 
                         docker compose pull
 
-                        # Start latest application
+
                         echo "=== Starting Latest Application ==="
 
                         docker compose up -d \
                             --force-recreate \
                             --remove-orphans
 
-                        # Show deployment status
+
                         echo "=== Deployment Status ==="
 
                         docker compose ps
 
-                        # Wait for application
+
                         echo "=== Waiting For Application ==="
 
                         sleep 10
 
-                        # Health check
+
                         echo "=== Application Health Check ==="
 
                         curl -f \
                             http://localhost:8081/api/hello
+
 
                         echo ""
 
@@ -255,7 +282,7 @@ pipeline {
                         echo "     DEPLOYMENT SUCCESSFUL"
                         echo "================================="
 
-                        # Logout
+
                         echo "=== Docker Logout ==="
 
                         docker logout
@@ -268,6 +295,7 @@ pipeline {
     post {
 
         success {
+
             echo '''
 =================================
       CI/CD SUCCESSFUL
@@ -291,6 +319,7 @@ Application Running
         }
 
         failure {
+
             echo '''
 =================================
        CI/CD FAILED
