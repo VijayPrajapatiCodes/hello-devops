@@ -1,0 +1,12 @@
+services:
+
+  hello-devops:
+
+    container_name: hello-devops
+
+    image: vijayprajapaticodes/hello-devops:latest
+
+    ports:
+      - "8081:8080"
+
+    restart: unless-stopped
